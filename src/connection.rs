@@ -173,8 +173,15 @@ impl Connection {
                 Ok(result) => result,
                 Err(err) => return Err(Error::IoError(io::Error::new(io::ErrorKind::Other, err))),
             };
-            let sess = ClientConnection::new(CONFIG.clone(), dns_name)
-                .map_err(Error::RustlsCreateConnection)?;
+            let sess = ClientConnection::new(
+                self.request
+                    .config
+                    .custom_rustls_config
+                    .clone()
+                    .unwrap_or_else(|| CONFIG.clone()),
+                dns_name,
+            )
+            .map_err(Error::RustlsCreateConnection)?;
 
             log::trace!("Establishing TCP connection to {}.", self.request.url.host);
             let tcp = self.connect()?;

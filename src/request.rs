@@ -3,9 +3,13 @@ use crate::http_url::{HttpUrl, Port};
 #[cfg(feature = "proxy")]
 use crate::proxy::Proxy;
 use crate::{Error, Response, ResponseLazy};
+#[cfg(feature = "rustls")]
+use rustls::ClientConfig;
 use std::collections::HashMap;
 use std::fmt;
 use std::fmt::Write;
+#[cfg(feature = "rustls")]
+use std::sync::Arc;
 
 /// A URL type for requests.
 pub type URL = String;
@@ -70,7 +74,7 @@ impl fmt::Display for Method {
 /// [`send`](struct.Request.html#method.send) or
 /// [`send_lazy`](struct.Request.html#method.send_lazy) on it, as it
 /// doesn't do much on its own.
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(Clone, Debug)]
 pub struct Request {
     pub(crate) method: Method,
     url: URL,
@@ -83,6 +87,8 @@ pub struct Request {
     max_redirects: usize,
     #[cfg(feature = "proxy")]
     pub(crate) proxy: Option<Proxy>,
+    #[cfg(feature = "rustls")]
+    pub(crate) custom_rustls_config: Option<Arc<ClientConfig>>,
 }
 
 impl Request {
@@ -110,6 +116,8 @@ impl Request {
             max_redirects: 100,
             #[cfg(feature = "proxy")]
             proxy: None,
+            #[cfg(feature = "rustls")]
+            custom_rustls_config: None,
         }
     }
 
@@ -253,6 +261,13 @@ impl Request {
         self
     }
 
+    /// Adds a custom rustls [`ClientConfig`] to this request.
+    #[cfg(feature = "rustls")]
+    pub fn with_rustls_config(mut self, config: Arc<ClientConfig>) -> Request {
+        self.custom_rustls_config = Some(config);
+        self
+    }
+
     /// Sends this request to the host.
     ///
     /// # Errors
@@ -304,6 +319,31 @@ impl Request {
         }
     }
 }
+
+impl PartialEq<Request> for Request {
+    fn eq(&self, rhs: &Request) -> bool {
+        #[allow(unused_mut)]
+        let mut result = self.method == rhs.method
+            && self.url == rhs.url
+            && self.params == rhs.params
+            && self.headers == rhs.headers
+            && self.body == rhs.body
+            && self.timeout == rhs.timeout
+            && self.max_headers_size == rhs.max_headers_size
+            && self.max_status_line_len == rhs.max_status_line_len
+            && self.max_redirects == rhs.max_redirects;
+
+        #[cfg(feature = "proxy")]
+        {
+            result = result && self.proxy == rhs.proxy;
+        }
+        // field custom_rustls_config does not implement PartialEq
+
+        result
+    }
+}
+
+impl Eq for Request {}
 
 pub(crate) struct ParsedRequest {
     pub(crate) url: HttpUrl,
